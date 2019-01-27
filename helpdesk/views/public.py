@@ -40,6 +40,7 @@ def homepage(request):
             return HttpResponseRedirect(reverse('helpdesk:dashboard'))
 
     if request.method == 'POST':
+        queues = get_queues_for_user(request.user)
         form = PublicTicketForm(request.POST, request.FILES)
         form.fields['queue'].choices = [('', '--------')] + [
             (q.id, q.title) for q in Queue.objects.filter(allow_public_submission=True)]
@@ -59,6 +60,7 @@ def homepage(request):
                     # if someone enters a non-int string for the ticket
                     return HttpResponseRedirect(reverse('helpdesk:home'))
     else:
+        queues = get_queues_for_user(request.user)
         try:
             queue = Queue.objects.get(slug=request.GET.get('queue', None))
         except Queue.DoesNotExist:
@@ -85,7 +87,7 @@ def homepage(request):
 
         form = PublicTicketForm(initial=initial_data)
         form.fields['queue'].choices = [('', '--------')] + [
-            (q.id, q.title) for q in Queue.objects.filter(allow_public_submission=True)]
+            (q.id, q.title) for q in queues]
 
     knowledgebase_categories = KBCategory.objects.all()
 
@@ -161,3 +163,20 @@ def change_language(request):
         return_to = request.GET['return_to']
 
     return render(request, 'helpdesk/public_change_language.html', {'next': return_to})
+
+
+def  get_queues_for_user(user):
+    """Return list of Queue objects available for given user
+    """
+
+    public = [q for q in Queue.objects.filter(allow_public_submission=True)]
+    queue_names = []
+    if user.is_authenticated:
+        for perm in user.get_group_permissions():
+            if perm.startswith('helpdesk.queue_access'):
+                queue_names.append(perm.split("_")[-1])
+    by_group = []
+    for qn in queue_names:
+        by_group += [q for q in Queue.objects.filter(slug=qn)]
+
+    return public + by_group
