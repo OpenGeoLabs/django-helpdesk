@@ -335,11 +335,13 @@ def ticket_from_message(message, queue, logger):
     matchobj = re.match(r".*\[" + queue.slug + r"-(?P<id>\d+)\]", subject)
     if matchobj:
         # This is a reply or forward.
-        ticket = matchobj.group('id')
-        logger.info("Matched tracking ID %s-%s" % (queue.slug, ticket))
+        ticket_id = matchobj.group('id')
+        logger.info("Matched tracking ID %s-%s" % (queue.slug, ticket_id))
+    elif re.match(r".*\[" + queue.slug + r"]", subject):
+        ticket_id = -1
     else:
         logger.info("No tracking ID matched.")
-        ticket = None
+        ticket_id = None
 
     body = None
     counter = 0
@@ -405,12 +407,12 @@ def ticket_from_message(message, queue, logger):
         else:
             body = mail.text
 
-    if ticket:
+    if ticket_id >= 0:
         try:
-            t = Ticket.objects.get(id=ticket)
+            t = Ticket.objects.get(id=ticket_id)
         except Ticket.DoesNotExist:
-            logger.info("Tracking ID %s-%s not associated with existing ticket. Creating new ticket." % (queue.slug, ticket))
-            ticket = None
+            logger.info("Tracking ID %s-%s not associated with existing ticket.  Creating new ticket." % (queue.slug, ticket_id))
+            ticket_id = None
         else:
             logger.info("Found existing ticket with Tracking ID %s-%s" % (t.queue.slug, t.id))
             if t.status == Ticket.CLOSED_STATUS:
@@ -423,7 +425,7 @@ def ticket_from_message(message, queue, logger):
     high_priority_types = {'high', 'important', '1', 'urgent'}
     priority = 2 if high_priority_types & {smtp_priority, smtp_importance} else 3
 
-    if ticket is None:
+    if ticket_id is None or ticket_id < 0:
         if settings.QUEUE_EMAIL_BOX_UPDATE_ONLY:
             return None
         new = True
