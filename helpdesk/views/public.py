@@ -43,7 +43,7 @@ def homepage(request):
         queues = get_queues_for_user(request.user)
         form = PublicTicketForm(request.POST, request.FILES)
         form.fields['queue'].choices = [('', '--------')] + [
-            (q.id, q.title) for q in Queue.objects.filter(allow_public_submission=True)]
+            (q.id, q.title) for q in queues]
         if form.is_valid():
             if text_is_spam(form.cleaned_data['body'], request):
                 # This submission is spam. Let's not save it.

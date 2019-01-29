@@ -65,11 +65,16 @@ def _get_user_queues(user):
     :return: A Python list of Queues
     """
     all_queues = Queue.objects.all()
+    public_ids = [q.pk for q in
+                  Queue.objects.filter(allow_public_submission=True)]
+
     limit_queues_by_user = \
         helpdesk_settings.HELPDESK_ENABLE_PER_QUEUE_STAFF_PERMISSION \
         and not user.is_superuser
+
     if limit_queues_by_user:
         id_list = [q.pk for q in all_queues if user.has_perm(q.permission_name)]
+        id_list += public_ids
         return all_queues.filter(pk__in=id_list)
     else:
         return all_queues
@@ -91,7 +96,8 @@ def _has_access_to_queue(user, queue):
 def _is_my_ticket(user, ticket):
     """Check to see if the user has permission to access
     a ticket. If not then deny access."""
-    if user.is_superuser or user.is_staff or user.id == ticket.assigned_to.id:
+    if user.is_superuser or user.is_staff or \
+       (ticket.assigned_to and user.id == ticket.assigned_to.id):
         return True
     else:
         return False
@@ -258,8 +264,8 @@ def view_ticket(request, ticket_id):
     ticket = get_object_or_404(Ticket, id=ticket_id)
     if not _has_access_to_queue(request.user, ticket.queue):
         raise PermissionDenied()
-    if not _is_my_ticket(request.user, ticket):
-        raise PermissionDenied()
+    #if not _is_my_ticket(request.user, ticket):
+    #    raise PermissionDenied()
 
     if 'take' in request.GET:
         # Allow the user to assign the ticket to themselves whilst viewing it.
@@ -1003,7 +1009,7 @@ def create_ticket(request):
     if request.method == 'POST':
         form = TicketForm(request.POST, request.FILES)
         form.fields['queue'].choices = [('', '--------')] + [
-            (q.id, q.title) for q in Queue.objects.all()]
+            (q.id, q.title) for q in _get_user_queues(request.user) ]
         form.fields['assigned_to'].choices = [('', '--------')] + [
             (u.id, u.get_username()) for u in assignable_users]
         if form.is_valid():
@@ -1021,7 +1027,7 @@ def create_ticket(request):
 
         form = TicketForm(initial=initial_data)
         form.fields['queue'].choices = [('', '--------')] + [
-            (q.id, q.title) for q in Queue.objects.all()]
+            (q.id, q.title) for q in _get_user_queues(request.user)]
         form.fields['assigned_to'].choices = [('', '--------')] + [
             (u.id, u.get_username()) for u in assignable_users]
         if helpdesk_settings.HELPDESK_CREATE_TICKET_HIDE_ASSIGNED_TO:
